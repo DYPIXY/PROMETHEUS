@@ -18,6 +18,8 @@ import logging
 import time
 from functools import cached_property
 from typing import Any
+# import numpy as np
+# EE_FRAME = "gripper_tip"
 
 from lerobot.common.cameras.utils import make_cameras_from_configs
 from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -103,6 +105,90 @@ class SO101Follower(Robot):
     @property
     def is_calibrated(self) -> bool:
         return self.bus.is_calibrated
+
+    # def send_t_action(self, action: dict[str, Any]) -> dict[str, Any]:
+    #     """
+    #     Transform action from end-effector space to joint space and send to motors.
+
+    #     Args:
+    #         action: Dictionary with keys 'delta_x', 'delta_y', 'delta_z' for end-effector control
+    #                or a numpy array with [delta_x, delta_y, delta_z]
+
+    #     Returns:
+    #         The joint-space action that was sent to the motors
+    #     """
+
+    #     if not self.is_connected:
+    #         raise DeviceNotConnectedError(f"{self} is not connected.")
+
+    #     # Convert action to numpy array if not already
+    #     if isinstance(action, dict):
+    #         if all(k in action for k in ["delta_x", "delta_y", "delta_z"]):
+    #             delta_ee = np.array(
+    #                 [
+    #                     action["delta_x"] * self.config.end_effector_step_sizes["x"],
+    #                     action["delta_y"] * self.config.end_effector_step_sizes["y"],
+    #                     action["delta_z"] * self.config.end_effector_step_sizes["z"],
+    #                 ],
+    #                 dtype=np.float32,
+    #             )
+    #             if "gripper" not in action:
+    #                 action["gripper"] = [1.0]
+    #             action = np.append(delta_ee, action["gripper"])
+    #         else:
+    #             logger.warning(
+    #                 f"Expected action keys 'delta_x', 'delta_y', 'delta_z', got {list(action.keys())}"
+    #             )
+    #             action = np.zeros(4, dtype=np.float32)
+
+    #     if self.current_joint_pos is None:
+    #         # Read current joint positions
+    #         current_joint_pos = self.bus.sync_read("Present_Position")
+    #         self.current_joint_pos = np.array([current_joint_pos[name] for name in self.bus.motors])
+
+    #     # Calculate current end-effector position using forward kinematics
+    #     if self.current_ee_pos is None:
+    #         self.current_ee_pos = self.kinematics.forward_kinematics(self.current_joint_pos, frame=EE_FRAME)
+
+    #     # Set desired end-effector position by adding delta
+    #     desired_ee_pos = np.eye(4)
+    #     desired_ee_pos[:3, :3] = self.current_ee_pos[:3, :3]  # Keep orientation
+
+    #     # Add delta to position and clip to bounds
+    #     desired_ee_pos[:3, 3] = self.current_ee_pos[:3, 3] + action[:3]
+    #     if self.end_effector_bounds is not None:
+    #         desired_ee_pos[:3, 3] = np.clip(
+    #             desired_ee_pos[:3, 3],
+    #             self.end_effector_bounds["min"],
+    #             self.end_effector_bounds["max"],
+    #         )
+
+    #     # Compute inverse kinematics to get joint positions
+    #     target_joint_values_in_degrees = self.kinematics.ik(
+    #         self.current_joint_pos, desired_ee_pos, position_only=True, frame=EE_FRAME
+    #     )
+
+    #     target_joint_values_in_degrees = np.clip(target_joint_values_in_degrees, -180.0, 180.0)
+    #     # Create joint space action dictionary
+    #     joint_action = {
+    #         f"{key}.pos": target_joint_values_in_degrees[i] for i, key in enumerate(self.bus.motors.keys())
+    #     }
+
+    #     # Handle gripper separately if included in action
+    #     # Gripper delta action is in the range 0 - 2,
+    #     # We need to shift the action to the range -1, 1 so that we can expand it to -Max_gripper_pos, Max_gripper_pos
+    #     joint_action["gripper.pos"] = np.clip(
+    #         self.current_joint_pos[-1] + (action[-1] - 1) * self.config.max_gripper_pos,
+    #         5,
+    #         self.config.max_gripper_pos,
+    #     )
+
+    #     self.current_ee_pos = desired_ee_pos.copy()
+    #     self.current_joint_pos = target_joint_values_in_degrees.copy()
+    #     self.current_joint_pos[-1] = joint_action["gripper.pos"]
+
+    #     # Send joint space action to parent class
+    #     return self.send_action(joint_action)
 
     def calibrate(self) -> None:
         logger.info(f"\nRunning calibration of {self}")

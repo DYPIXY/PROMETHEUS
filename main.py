@@ -14,38 +14,81 @@ follower.connect()
 
 
 #shoulder_pan.pos/shoulder_lift.pos/elbow_flex.pos/wrist_flex.pos/wrist_roll.pos/gripper.pos
+initialPos = {'shoulder_pan.pos': 3, 'shoulder_lift.pos': -95, 'elbow_flex.pos': 64, 'wrist_flex.pos': -83, 'wrist_roll.pos': 1, 'gripper.pos': 14}
 
 
+SCROLL_VEL = 6
 VELOCITY = 7
 isLeftClick = False
 isRightClick = False
+isBackButtonClick = False
+isForwardButtonClick = False
 isQPressed = False
 isEPressed = False
-shoulderMeta = follower.get_observation()["shoulder_pan.pos"]
-deltaX = 0
+
+
+async def setInitialPos():
+    global state
+    global shoulderMeta
+    global shoulderLiftMeta
+    global elbowFlexMeta
+    follower.send_action(initialPos)
+    await asyncio.sleep(2)
+    # follower.send_t_action({"delta_x": 0.1})
+    # await asyncio.sleep(2)
+
+    state = follower.get_observation()
+    shoulderMeta = state["shoulder_pan.pos"] 
+    shoulderLiftMeta = state["shoulder_lift.pos"]
+    elbowFlexMeta = state["elbow_flex.pos"]
+
 
 async def jsonInterpreter(data):
     global isLeftClick
     global isRightClick
+    global isBackButtonClick
+    global isForwardButtonClick
     global isEPressed
     global isQPressed
-    global deltaX
     global shoulderMeta
+    global elbowFlexMeta
+    global shoulderLiftMeta
+    # global follower
+
     # state = follower.get_observation()
     if data["type"] == "mouseup":
         if data["button"] == 0:
             isLeftClick = False
         elif data["button"] == 2:
             isRightClick = False
+        elif data["button"] == 3:
+            isBackButtonClick = False
+        elif data["button"] == 4:
+            isForwardButtonClick = False
     elif data["type"] == "mousedown":
         if data["button"] == 0:
             isLeftClick = True
+        elif data["button"] == 1:
+            # await setInitialPos() -> deve ser colocado em uma queue de acoes para ser consumido na thread certa
+            pass
         elif data["button"] == 2:
             isRightClick = True
+        elif data["button"] == 3:
+            isBackButtonClick = True
+        elif data["button"] == 4:
+            isForwardButtonClick = True
     elif data["type"] == "wheel":
+        normalizedDelta = data["delta"] / 100
+        shoulderLiftMeta += SCROLL_VEL * -normalizedDelta
+        if shoulderLiftMeta > 0:
+            shoulderLiftMeta = 0
+        elif shoulderLiftMeta < -100:
+            shoulderLiftMeta = -100
+        elbowFlexMeta += SCROLL_VEL * normalizedDelta
+        print(shoulderLiftMeta)
+       
         pass
     elif data["type"] == "mousemove":
-        # deltaX += data["x"]
         shoulderMeta += data["x"] * 50
         if shoulderMeta > 100:
             shoulderMeta = 100
@@ -77,10 +120,13 @@ async def handler(websocket):
 
 def main_robot_loop():
     global follower
-    global deltaX
     global isLeftClick
     global isRightClick
+    global isBackButtonClick
+    global isForwardButtonClick
     global shoulderMeta
+    global elbowFlexMeta
+    global shoulderLiftMeta
     
     while True:
         state = follower.get_observation()
@@ -88,19 +134,20 @@ def main_robot_loop():
             follower.send_action({"gripper.pos": state["gripper.pos"] + 3})
         if isLeftClick:
             follower.send_action({"gripper.pos": state["gripper.pos"] - 3})
+        if isBackButtonClick:
+            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] - 5})
+        if isForwardButtonClick:
+            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] + 5})
         if isQPressed:
-            follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] + 3})
+            follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] + 5})
         if isEPressed:
-            follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] - 3})
+            follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] - 5})
 
-
-        # deltaXSign = np.sign(deltaX)
-        # vel = VELOCITY
-        # if np.sign(deltaX - vel * deltaXSign) != deltaXSign:
-            # vel = abs(deltaX)
-        # deltaX -= vel * deltaXSign
         follower.send_action({"shoulder_pan.pos": shoulderMeta})
-        deltaX = 0
+        follower.send_action({
+            "elbow_flex.pos": elbowFlexMeta,
+            "shoulder_lift.pos": shoulderLiftMeta
+        })
         
 
 
@@ -112,6 +159,7 @@ async def serveWebsocket():
 
 
 async def main():
+    await setInitialPos()
     camera_loop = threading.Thread(target=cameraStream)
     camera_loop.start()
     main_read_loop = threading.Thread(target=main_robot_loop)
