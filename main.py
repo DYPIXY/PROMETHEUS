@@ -21,7 +21,7 @@ isLeftClick = False
 isRightClick = False
 isQPressed = False
 isEPressed = False
-
+shoulderMeta = follower.get_observation()["shoulder_pan.pos"]
 deltaX = 0
 
 async def jsonInterpreter(data):
@@ -30,6 +30,7 @@ async def jsonInterpreter(data):
     global isEPressed
     global isQPressed
     global deltaX
+    global shoulderMeta
     # state = follower.get_observation()
     if data["type"] == "mouseup":
         if data["button"] == 0:
@@ -44,7 +45,13 @@ async def jsonInterpreter(data):
     elif data["type"] == "wheel":
         pass
     elif data["type"] == "mousemove":
-        deltaX += data["x"] * 1000
+        # deltaX += data["x"]
+        shoulderMeta += data["x"] * 50
+        if shoulderMeta > 100:
+            shoulderMeta = 100
+        elif shoulderMeta < -100:
+            shoulderMeta = -100
+            
         pass
     elif data["type"] == "keydown":
         if data["key"] == "q":
@@ -73,6 +80,7 @@ def main_robot_loop():
     global deltaX
     global isLeftClick
     global isRightClick
+    global shoulderMeta
     
     while True:
         state = follower.get_observation()
@@ -84,13 +92,15 @@ def main_robot_loop():
             follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] + 3})
         if isEPressed:
             follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] - 3})
-        deltaXSign = np.sign(deltaX)
-        vel = VELOCITY
-        if np.sign(deltaX - vel * deltaXSign) != deltaXSign:
-            vel = abs(deltaX)
-        deltaX -= vel * deltaXSign
-        follower.send_action({"shoulder_pan.pos": state["shoulder_pan.pos"] + vel * deltaXSign})
 
+
+        # deltaXSign = np.sign(deltaX)
+        # vel = VELOCITY
+        # if np.sign(deltaX - vel * deltaXSign) != deltaXSign:
+            # vel = abs(deltaX)
+        # deltaX -= vel * deltaXSign
+        follower.send_action({"shoulder_pan.pos": shoulderMeta})
+        deltaX = 0
         
 
 
