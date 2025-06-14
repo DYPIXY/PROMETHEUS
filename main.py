@@ -14,7 +14,7 @@ follower.connect()
 
 
 #shoulder_pan.pos/shoulder_lift.pos/elbow_flex.pos/wrist_flex.pos/wrist_roll.pos/gripper.pos
-initialPos = {'shoulder_pan.pos': 3, 'shoulder_lift.pos': -95, 'elbow_flex.pos': 64, 'wrist_flex.pos': -83, 'wrist_roll.pos': 1, 'gripper.pos': 14}
+initialPos = {'shoulder_pan.pos': 3, 'shoulder_lift.pos': 0, 'elbow_flex.pos': -90, 'wrist_flex.pos': -83, 'wrist_roll.pos': 1, 'gripper.pos': 14}
 
 
 SCROLL_VEL = 6
@@ -25,7 +25,6 @@ isBackButtonClick = False
 isForwardButtonClick = False
 isQPressed = False
 isEPressed = False
-
 
 async def setInitialPos():
     global state
@@ -85,17 +84,16 @@ async def jsonInterpreter(data):
         elif shoulderLiftMeta < -100:
             shoulderLiftMeta = -100
         elbowFlexMeta += SCROLL_VEL * normalizedDelta
-        print(shoulderLiftMeta)
-       
-        pass
+        if elbowFlexMeta > 0:
+            elbowFlexMeta = 0
+        elif elbowFlexMeta < -90:
+            elbowFlexMeta = -90
     elif data["type"] == "mousemove":
         shoulderMeta += data["x"] * 50
         if shoulderMeta > 100:
             shoulderMeta = 100
         elif shoulderMeta < -100:
             shoulderMeta = -100
-            
-        pass
     elif data["type"] == "keydown":
         if data["key"] == "q":
             isQPressed = True
