@@ -7,7 +7,7 @@ import cv2
 
 
 
-async def cameraStream():
+def cameraStream():
     config = OpenCVCameraConfig(
         index_or_path='/dev/video4',
         fps=30,
@@ -30,10 +30,9 @@ async def cameraStream():
             frame = camera.async_read(timeout_ms=200)
             if frame is not None:
                 stream.set_frame(frame)
-                cv2.imshow('frame', frame)
+                # cv2.imshow('frame', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-            await asyncio.sleep(0.01)
     finally:
         camera.disconnect()
         cv2.destroyAllWindows()
