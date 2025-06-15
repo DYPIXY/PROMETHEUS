@@ -9,7 +9,7 @@ import cv2
 
 def cameraStream():
     config = OpenCVCameraConfig(
-        index_or_path='/dev/video4',
+        index_or_path='/dev/video0',
         fps=30,
         width=640,
         height=480,
@@ -20,11 +20,10 @@ def cameraStream():
     camera = OpenCVCamera(config)
     camera.connect()
 
-    stream = Stream("my_camera", size=(640, 480), quality=50, fps=30)
+    stream = Stream("my_camera", size=(640, 480), quality=60, fps=15)
     server = MjpegServer("0.0.0.0", 8080)
     server.add_stream(stream)
     server.start()
-
     try:
         while True:
             frame = camera.async_read(timeout_ms=200)

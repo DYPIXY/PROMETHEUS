@@ -3,6 +3,11 @@ import json
 import websockets
 import threading
 import numpy as np
+import cv2
+import base64
+
+import hand_tracking
+
 from lerobot.common.robots.so101_follower import SO101Follower, SO101FollowerConfig
 from camera import cameraStream
 config = SO101FollowerConfig(
@@ -19,18 +24,21 @@ initialPos = {'shoulder_pan.pos': 3, 'shoulder_lift.pos': 0, 'elbow_flex.pos': -
 
 SCROLL_VEL = 6
 VELOCITY = 7
-isLeftClick = False
-isRightClick = False
 isBackButtonClick = False
 isForwardButtonClick = False
 isQPressed = False
 isEPressed = False
+isOpeningClamp = False
+isClosingClamp = False
 
 async def setInitialPos():
     global state
     global shoulderMeta
     global shoulderLiftMeta
     global elbowFlexMeta
+    global gripperMeta
+    global wristRollMeta
+    global wristFlexMeta
     follower.send_action(initialPos)
     await asyncio.sleep(2)
     # follower.send_t_action({"delta_x": 0.1})
@@ -40,11 +48,43 @@ async def setInitialPos():
     shoulderMeta = state["shoulder_pan.pos"] 
     shoulderLiftMeta = state["shoulder_lift.pos"]
     elbowFlexMeta = state["elbow_flex.pos"]
+    gripperMeta = state["gripper.pos"]
+    wristRollMeta = state["wrist_roll.pos"]
+    wristFlexMeta = state["wrist_flex.pos"]
+
+
+def moveZ(value):
+    global elbowFlexMeta
+    global shoulderLiftMeta
+    shoulderLiftMeta += SCROLL_VEL * 2 * -value
+    if shoulderLiftMeta > 0:
+        shoulderLiftMeta = 0
+    elif shoulderLiftMeta < -100:
+        shoulderLiftMeta = -100
+    elbowFlexMeta += SCROLL_VEL * value
+    if elbowFlexMeta > 0:
+        elbowFlexMeta = 0
+    elif elbowFlexMeta < -90:
+        elbowFlexMeta = -90
+
+def moveY(value):
+    global elbowFlexMeta
+    global shoulderLiftMeta
+    shoulderLiftMeta += SCROLL_VEL * -value
+    if shoulderLiftMeta > 0:
+        shoulderLiftMeta = 0
+    elif shoulderLiftMeta < -100:
+        shoulderLiftMeta = -100
+    elbowFlexMeta += SCROLL_VEL * value
+    if elbowFlexMeta > 0:
+        elbowFlexMeta = 0
+    elif elbowFlexMeta < -90:
+        elbowFlexMeta = -90
 
 
 async def jsonInterpreter(data):
-    global isLeftClick
-    global isRightClick
+    global isOpeningClamp
+    global isClosingClamp
     global isBackButtonClick
     global isForwardButtonClick
     global isEPressed
@@ -52,48 +92,47 @@ async def jsonInterpreter(data):
     global shoulderMeta
     global elbowFlexMeta
     global shoulderLiftMeta
-    # global follower
+    global gripperMeta
+    global wristFlexMeta
+    global wristRollMeta
 
-    # state = follower.get_observation()
+
     if data["type"] == "mouseup":
         if data["button"] == 0:
-            isLeftClick = False
+            isClosingClamp = False
         elif data["button"] == 2:
-            isRightClick = False
+            isOpeningClamp = False
         elif data["button"] == 3:
             isBackButtonClick = False
         elif data["button"] == 4:
             isForwardButtonClick = False
     elif data["type"] == "mousedown":
         if data["button"] == 0:
-            isLeftClick = True
+            isClosingClamp = True
         elif data["button"] == 1:
             # await setInitialPos() -> deve ser colocado em uma queue de acoes para ser consumido na thread certa
             pass
         elif data["button"] == 2:
-            isRightClick = True
+            isOpeningClamp = True
         elif data["button"] == 3:
             isBackButtonClick = True
         elif data["button"] == 4:
             isForwardButtonClick = True
     elif data["type"] == "wheel":
         normalizedDelta = data["delta"] / 100
-        shoulderLiftMeta += SCROLL_VEL * -normalizedDelta
-        if shoulderLiftMeta > 0:
-            shoulderLiftMeta = 0
-        elif shoulderLiftMeta < -100:
-            shoulderLiftMeta = -100
-        elbowFlexMeta += SCROLL_VEL * normalizedDelta
-        if elbowFlexMeta > 0:
-            elbowFlexMeta = 0
-        elif elbowFlexMeta < -90:
-            elbowFlexMeta = -90
+        moveY(normalizedDelta)
+
     elif data["type"] == "mousemove":
         shoulderMeta += data["x"] * 50
         if shoulderMeta > 100:
             shoulderMeta = 100
         elif shoulderMeta < -100:
             shoulderMeta = -100
+
+
+
+        normalizedDelta = data["y"] * -4
+        moveZ(normalizedDelta)
     elif data["type"] == "keydown":
         if data["key"] == "q":
             isQPressed = True
@@ -105,6 +144,40 @@ async def jsonInterpreter(data):
             isQPressed = False
         elif data["key"] == "e":
             isEPressed = False
+    elif data["type"] == "webcam_frame":
+        img_b64 = data["data"]
+
+        # --- IMPORTANT: Strip data URI prefix if present ---
+        if "," in img_b64 and img_b64.startswith("data:"):
+            img_b64 = img_b64.split(",")[1]
+
+        try:
+            decoded_data = base64.b64decode(img_b64)
+        except Exception:
+            return # Stop processing if decoding fails
+        
+        np_data = np.frombuffer(decoded_data, np.uint8)
+        img = cv2.imdecode(np_data,cv2.IMREAD_UNCHANGED)
+
+        if img is None:
+            return # Stop here if img is None
+
+        (avg_closure, deltaX, deltaY, deltaZ, angles) = hand_tracking.get_hand_data(img)
+        (angXDelta, angZDelta) = angles
+        moveZ(deltaZ * 4000000)
+        moveY(deltaY * 25)
+        shoulderMeta += -deltaX * 150
+        # wristRollMeta += angXDelta * 20
+        wristFlexMeta += angZDelta * -50
+        # if avg_closure is not None:
+        #     gripperMeta = avg_closure
+        # print(avg_closure)
+        # isClosingClamp = not isOpeningClamp
+        # clampPercentage = hand_tracking.get_hand_closure_percentage(img)
+        # print(clampPercentage)
+        
+        
+        
     else:
         raise ValueError("Unrecognized type")
     
@@ -118,42 +191,53 @@ async def handler(websocket):
 
 def main_robot_loop():
     global follower
-    global isLeftClick
-    global isRightClick
     global isBackButtonClick
     global isForwardButtonClick
     global shoulderMeta
     global elbowFlexMeta
     global shoulderLiftMeta
+    global gripperMeta
+    global isOpeningClamp
+    global isClosingClamp
+    global wristFlexMeta
+    global wristRollMeta
+    
     
     while True:
         state = follower.get_observation()
-        if isRightClick:
-            follower.send_action({"gripper.pos": state["gripper.pos"] + 3})
-        if isLeftClick:
-            follower.send_action({"gripper.pos": state["gripper.pos"] - 3})
         if isBackButtonClick:
-            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] - 5})
+            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] - 10})
         if isForwardButtonClick:
-            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] + 5})
+            follower.send_action({"wrist_flex.pos": state["wrist_flex.pos"] + 10})
         if isQPressed:
             follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] + 5})
         if isEPressed:
             follower.send_action({"wrist_roll.pos": state["wrist_roll.pos"] - 5})
 
-        follower.send_action({"shoulder_pan.pos": shoulderMeta})
+
+
+        if isOpeningClamp:
+            gripperMeta += 0.1
+        if isClosingClamp:
+            gripperMeta -= 0.1
+
+        if gripperMeta < 0:
+            gripperMeta = 0
+        if gripperMeta > 100:
+            gripperMeta = 100
+
         follower.send_action({
             "elbow_flex.pos": elbowFlexMeta,
-            "shoulder_lift.pos": shoulderLiftMeta
+            "shoulder_lift.pos": shoulderLiftMeta,
+            "shoulder_pan.pos": shoulderMeta,
+            "gripper.pos": gripperMeta,
+            # "wrist_roll.pos": wristRollMeta,
+            # "wrist_flex.pos": wristFlexMeta
         })
         
 
 
 
-async def serveWebsocket():
-    async with websockets.serve(handler, "172.16.19.183", 6969):
-        print("WebSocket server running on ws://127.0.0.1:6969")
-        await asyncio.Future()
 
 
 async def main():
@@ -162,7 +246,7 @@ async def main():
     camera_loop.start()
     main_read_loop = threading.Thread(target=main_robot_loop)
     main_read_loop.start()
-    async with websockets.serve(handler, "172.16.19.183", 6969):
+    async with websockets.serve(handler, "0.0.0.0", 6969):
         print("WebSocket server running on ws://127.0.0.1:6969")
         await asyncio.Future()
     
