@@ -162,15 +162,16 @@ async def jsonInterpreter(data):
         if img is None:
             return # Stop here if img is None
 
-        (avg_closure, deltaX, deltaY, deltaZ, angles) = hand_tracking.get_hand_data(img)
-        (angXDelta, angZDelta) = angles
+        (avg_closure, positionDeltas, anglesDeltas) = hand_tracking.get_hand_data(img)
+        (deltaX, deltaY, deltaZ) = positionDeltas
+        (angXDelta, angYDelta, angZDelta) = anglesDeltas
         moveZ(deltaZ * 4000000)
         moveY(deltaY * 25)
         shoulderMeta += -deltaX * 150
         # wristRollMeta += angXDelta * 20
         wristFlexMeta += angZDelta * -50
-        # if avg_closure is not None:
-        #     gripperMeta = avg_closure
+        if avg_closure is not None:
+            gripperMeta = avg_closure
         # print(avg_closure)
         # isClosingClamp = not isOpeningClamp
         # clampPercentage = hand_tracking.get_hand_closure_percentage(img)

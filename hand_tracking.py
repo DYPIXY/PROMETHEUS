@@ -23,10 +23,6 @@ mp_hands = mp.solutions.hands
 
 TOUCH_THRESHOLD = .2
 
-lastHandX = None
-lastHandY = None
-lastHandZ = None
-
 def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2 + (point1.z - point2.z)**2)
 
@@ -35,112 +31,54 @@ def get_hand_data(image):
             return True
 
     with mp_hands.Hands(
-        min_detection_confidence=.7, # Aumentei a confiança para detecção mais estável
+        min_detection_confidence=.7,
         min_tracking_confidence=.7,
         max_num_hands=1) as hands:
-        global lastHandX
-        global lastHandY
-        global lastHandZ
     
         results = hands.process(image)
 
-        # Desenha as anotações da mão na imagem.
-        image.flags.writeable = True
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Obtenha os landmarks específicos
-                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-                index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP] # Usei o dedo indicador como exemplo, mas você pode usar o dedo médio se preferir
-                index_finger_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP] 
-                avg_closure = 0
-                '''
-                # distancia entre ponta do polegar e ponta do indicador
-                distanceThumbIndex = calculate_distance(thumb_tip, index_finger_tip)
-                # distancia index base
-                distanceIndexBase = calculate_distance(index_finger_tip, index_finger_mcp) * 1.2
-            
-                distance = ((distanceThumbIndex * 100) / distanceIndexBase)
-                # capa valores altos e baixos
-                if distance <= 10:
-                    avg_closure = 0
-                else:
-                    avg_closure = min(distance, 100)
-                print(avg_closure)
-                '''
-                wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-                deltaX = wrist.x - (wrist.x if lastHandX is None else lastHandX)
-                deltaY = wrist.y - (wrist.y if lastHandY is None else lastHandY)
-                deltaZ = wrist.z - (wrist.z if lastHandZ is None else lastHandZ)
-                
-            
-
-                lastHandX = wrist.x
-                lastHandY = wrist.y
-                lastHandZ = wrist.z
-
-                '''
-                distance = math.sqrt(
-                    (thumb_tip.x - index_finger_tip.x)**2 +
-                    (thumb_tip.y - index_finger_tip.y)**2 +
-                    (thumb_tip.z - index_finger_tip.z)**2
-                )
-                '''
-                return (avg_closure, deltaX, deltaY, deltaZ, get_hand_rotation(hand_landmarks))
+                return (get_hand_closure(hand_landmarks), get_hand_position(hand_landmarks), get_hand_rotation(hand_landmarks))
         else:
-                return (None, 0, 0, 0, (0, 0))
-            
-'''
-def get_hand_closure_percentage(image):
-    # Get relevant landmark points
-    # Fingertips
-    # cv2.
+                return (None, (0, 0, 0), (0, 0, 0))
 
-
-    if (image is None):
-            return False
-
-    with mp_hands.Hands(
-        min_detection_confidence=0.7, # Aumentei a confiança para detecção mais estável
-        min_tracking_confidence=0.7,
-        max_num_hands=1) as hands:
+def get_hand_closure(hand_landmarks) -> float:
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    avg_closure = 0
     
-        results = hands.process(image)
+    # distancia entre ponta do polegar e ponta do indicador
+    distanceThumbIndex = calculate_distance(thumb_tip, index_finger_tip)
 
-        # Desenha as anotações da mão na imagem.
-        image.flags.writeable = True
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    avg_closure = distanceThumbIndex * 300
+    
+    if avg_closure <= 20:
+        avg_closure = 0
+    else:
+        avg_closure = min(avg_closure, 100)
+    
+    return avg_closure
 
-        print(get_hand_data(image))
+lastHandX = None
+lastHandY = None
+lastHandZ = None
 
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
+def get_hand_position(hand_landmarks):
+    global lastHandX
+    global lastHandY
+    global lastHandZ
+    
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
 
-                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-                index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-
-                # Wrist for normalization
-                wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-
-                # For thumb, you might compare to the base of the thumb or wrist
-                distance = calculate_distance(thumb_tip, index_tip)
-            
-                mp_drawing.draw_landmarks(
-                        image,
-                        hand_landmarks,
-                        mp_hands.HAND_CONNECTIONS,
-                        mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2)
-                    )
-                log2(distance)
-                # Flip the image horizontally for a selfie-view display.
-                cv2.imshow('MediaPipe Hand Tracking - Thumb and Middle Finger', cv2.flip(image, 1))
-
-                # Retorna procentagem
-                avg_closure = max(0, min(1, avg_closure)) 
-                return avg_closure * 100 # Return as percentage
-'''
+    deltaX = wrist.x - (wrist.x if lastHandX is None else lastHandX)
+    deltaY = wrist.y - (wrist.y if lastHandY is None else lastHandY)
+    deltaZ = wrist.z - (wrist.z if lastHandZ is None else lastHandZ)
+    
+    lastHandX = wrist.x
+    lastHandY = wrist.y
+    lastHandZ = wrist.z
+    return (deltaX, deltaY, deltaZ)
 
 lastAngleX = None
 lastAngleY = None
@@ -168,9 +106,8 @@ def get_hand_rotation(hand_landmarks) -> tuple:
     lastAngleX = angleX
     lastAngleY = angleY
     lastAngleZ = angleZ
-
-    print(f"deltaX: {math.degrees(deltaX):.4f}, deltaY: {math.degrees(deltaY):.4f}, deltaZ: {math.degrees(deltaZ):.4f}")
-    return (deltaX, deltaZ)
+    
+    return (deltaX, deltaY, deltaZ)
 
 
 if (__name__ == '__main__') :
