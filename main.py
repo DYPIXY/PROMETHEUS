@@ -165,11 +165,11 @@ async def jsonInterpreter(data):
         (avg_closure, positionDeltas, anglesDeltas) = hand_tracking.get_hand_data(img)
         (deltaX, deltaY, deltaZ) = positionDeltas
         (angXDelta, angYDelta, angZDelta) = anglesDeltas
-        moveZ(deltaZ * 4000000)
-        moveY(deltaY * 25)
-        shoulderMeta += -deltaX * 150
-        # wristRollMeta += angXDelta * 20
-        wristFlexMeta += angZDelta * -50
+        moveZ(deltaZ * 15000000)
+        moveY(deltaY * 250)
+        shoulderMeta += -deltaX * 900
+        wristRollMeta += angXDelta * 20
+        wristFlexMeta += angZDelta * -5000
         if avg_closure is not None:
             gripperMeta = avg_closure
         # print(avg_closure)
@@ -232,8 +232,8 @@ def main_robot_loop():
             "shoulder_lift.pos": shoulderLiftMeta,
             "shoulder_pan.pos": shoulderMeta,
             "gripper.pos": gripperMeta,
-            # "wrist_roll.pos": wristRollMeta,
-            # "wrist_flex.pos": wristFlexMeta
+            #"wrist_roll.pos": wristRollMeta,
+            #"wrist_flex.pos": wristFlexMeta
         })
         
 

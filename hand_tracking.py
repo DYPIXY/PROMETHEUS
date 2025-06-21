@@ -64,36 +64,67 @@ lastHandX = None
 lastHandY = None
 lastHandZ = None
 
+SMOOTHING_FACTOR = .9  # entre 0 (sem smoothing) e 1 (muito smooth)
+
+smoothedWristX, smoothedWristY, smoothedWristZ = None, None, None
+
+def smooth_value(new_value, old_value, factor=SMOOTHING_FACTOR):
+    if old_value is None:
+        return new_value
+    return old_value * factor + new_value * (1 - factor)
+
 def get_hand_position(hand_landmarks):
-    global lastHandX
-    global lastHandY
-    global lastHandZ
-    
+    global lastHandX, lastHandY, lastHandZ
+    global smoothedWristX, smoothedWristY, smoothedWristZ
+
     wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
 
-    deltaX = wrist.x - (wrist.x if lastHandX is None else lastHandX)
-    deltaY = wrist.y - (wrist.y if lastHandY is None else lastHandY)
-    deltaZ = wrist.z - (wrist.z if lastHandZ is None else lastHandZ)
-    
-    lastHandX = wrist.x
-    lastHandY = wrist.y
-    lastHandZ = wrist.z
+    rawX, rawY, rawZ = wrist.x, wrist.y, wrist.z
+
+    smoothedWristX = smooth_value(rawX, smoothedWristX)
+    smoothedWristY = smooth_value(rawY, smoothedWristY)
+    smoothedWristZ = smooth_value(rawZ, smoothedWristZ)
+
+    deltaX = smoothedWristX - (lastHandX if lastHandX is not None else smoothedWristX)
+    deltaY = smoothedWristY - (lastHandY if lastHandY is not None else smoothedWristY)
+    deltaZ = smoothedWristZ - (lastHandZ if lastHandZ is not None else smoothedWristZ)
+
+    lastHandX, lastHandY, lastHandZ = smoothedWristX, smoothedWristY, smoothedWristZ
+
     return (deltaX, deltaY, deltaZ)
+
 
 lastAngleX = None
 lastAngleY = None
 lastAngleZ = None
 
+smoothedMiddleFingerX, smoothedMiddleFingerY, smoothedMiddleFingerZ = None, None, None
+smoothedThumbX, smoothedThumbY, smoothedThumbZ = None, None, None
+
 def get_hand_rotation(hand_landmarks) -> tuple:
     global lastAngleX, lastAngleY, lastAngleZ
+    global smoothedMiddleFingerX, smoothedMiddleFingerY, smoothedMiddleFingerZ
+    global smoothedThumbX, smoothedThumbY, smoothedThumbZ
 
     thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
     middle_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
-    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    
 
-    cathetY = middle_finger_tip.y - wrist.y
-    cathetX = thumb_tip.x - wrist.x
-    cathetZ = thumb_tip.z - wrist.z
+    rawX, rawY, rawZ = thumb_tip.x, thumb_tip.y, thumb_tip.z
+
+    smoothedThumbX = smooth_value(rawX, smoothedThumbX)
+    smoothedThumbY = smooth_value(rawY, smoothedThumbY)
+    smoothedThumbZ = smooth_value(rawZ, smoothedThumbZ)
+
+    rawX, rawY, rawZ = middle_finger_tip.x, middle_finger_tip.y, middle_finger_tip.z
+
+    smoothedMiddleFingerX = smooth_value(rawX, smoothedMiddleFingerX)
+    smoothedMiddleFingerY= smooth_value(rawY, smoothedMiddleFingerY)
+    smoothedMiddleFingerZ = smooth_value(rawZ, smoothedMiddleFingerZ)
+
+    cathetY = smoothedMiddleFingerY - smoothedWristY
+    cathetX = smoothedThumbX - smoothedWristX
+    cathetZ = smoothedThumbZ - smoothedWristZ
     
     angleX = math.atan2(cathetY, cathetX)
     angleY = math.atan2(cathetY, cathetZ)
@@ -129,7 +160,7 @@ if (__name__ == '__main__') :
     with mp_hands.Hands(
         min_detection_confidence=0.7, # Aumentei a confiança para detecção mais estável
         min_tracking_confidence=0.9,
-        max_num_hands=1) as hands: # Aumentei 
+        max_num_hands=2) as hands: # Aumentei 
         
         while cap.isOpened():
             success, image = cap.read()
@@ -163,8 +194,6 @@ if (__name__ == '__main__') :
                         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
                         mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2)
                     )
-                    get_hand_rotation(hand_landmarks)
-
 
             cv2.imshow('MediaPipe Hand Tracking', cv2.flip(image, 1))
             if cv2.waitKey(5) & 0xFF == 27:
