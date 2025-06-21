@@ -1,0 +1,4 @@
+websockets
+mediapipe
+mjpeg_streamer
+feetech-servo-sdk
